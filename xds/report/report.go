@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-type server struct {
+type MeterServer struct {
 	loadReportingService.UnimplementedLoadReportingServiceServer
 
 	lock           sync.Mutex
@@ -27,13 +27,13 @@ type server struct {
 	logger                 *logger.Klogger
 }
 
-type Option func(s *server)
+type Option func(s *MeterServer)
 
 func NewMeterServer(logger *logger.Klogger, opts ...Option) loadReportingService.LoadReportingServiceServer {
 	meter := meter.GetMeter()
 	lrsUpdatesCounter, _ := meter.Int64Counter("lrs_updates")
 	lrsNodesCounter, _ := meter.Int64UpDownCounter("lrs_nodes")
-	s := &server{
+	s := &MeterServer{
 		nodesConnected:         make(map[string]bool),
 		statsIntervalInSeconds: 300,
 		statsUpdateCounter:     lrsUpdatesCounter,
@@ -48,7 +48,7 @@ func NewMeterServer(logger *logger.Klogger, opts ...Option) loadReportingService
 	return s
 }
 
-func (s *server) StreamLoadStats(stream loadReportingService.LoadReportingService_StreamLoadStatsServer) error {
+func (s *MeterServer) StreamLoadStats(stream loadReportingService.LoadReportingService_StreamLoadStatsServer) error {
 	var node *corev3.Node
 	for {
 		req, err := stream.Recv()
@@ -66,7 +66,7 @@ func (s *server) StreamLoadStats(stream loadReportingService.LoadReportingServic
 	}
 }
 
-func (s *server) HandleRequest(stream loadReportingService.LoadReportingService_StreamLoadStatsServer, request *loadReportingService.LoadStatsRequest) {
+func (s *MeterServer) HandleRequest(stream loadReportingService.LoadReportingService_StreamLoadStatsServer, request *loadReportingService.LoadStatsRequest) {
 	nodeID := request.GetNode().GetId()
 
 	s.statsUpdateCounter.Add(stream.Context(), 1)
@@ -100,7 +100,7 @@ func (s *server) HandleRequest(stream loadReportingService.LoadReportingService_
 	}
 }
 
-func (s *server) removeNode(ctx context.Context, node *corev3.Node) {
+func (s *MeterServer) removeNode(ctx context.Context, node *corev3.Node) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -112,7 +112,7 @@ func (s *server) removeNode(ctx context.Context, node *corev3.Node) {
 }
 
 func WithStatsIntervalInSeconds(statsIntervalInSeconds int64) Option {
-	return func(s *server) {
+	return func(s *MeterServer) {
 		s.statsIntervalInSeconds = statsIntervalInSeconds
 	}
 }
