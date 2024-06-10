@@ -128,6 +128,21 @@ func (k *Klogger) SetKafkaWriter(brokers []string) {
 	))
 }
 
+// GetKafkaWriter returns the Kafka writer instance
+func (k *Klogger) GetKafkaWriter() *kafka.Writer {
+	return k.kafkaWriter
+}
+
+// SetLogger sets the slog.Logger instance
+func (k *Klogger) SetLogger(logger *slog.Logger) {
+	k.logger = logger
+}
+
+// GetLogger returns the slog.Logger instance
+func (k *Klogger) GetLogger() *slog.Logger {
+	return k.logger
+}
+
 // InitFlags is a shim, only accepts
 func InitFlags(flagset *pflag.FlagSet) {
 	if flagset == nil {
