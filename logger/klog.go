@@ -9,7 +9,10 @@ import (
 	"sync"
 	"sync/atomic"
 
+	slogkafka "github.com/samber/slog-kafka"
+	slogmulti "github.com/samber/slog-multi"
 	slogzap "github.com/samber/slog-zap"
+	"github.com/segmentio/kafka-go"
 	"github.com/spf13/pflag"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -34,8 +37,9 @@ type Config struct {
 
 // Klogger wraps a slog logger
 type Klogger struct {
-	logger *slog.Logger
-	config Config
+	logger      *slog.Logger
+	config      Config
+	kafkaWriter *kafka.Writer
 }
 
 const (
@@ -95,11 +99,33 @@ func Singleton() *Klogger {
 		if err != nil {
 			panic(err)
 		}
-		logger := slog.New(slogzap.Option{Level: slog.LevelDebug, Logger: zapLogger}.NewZapHandler())
+
+		klogHandler := NewKlogHandler()
+
+		// Combine handlers using slogmulti
+		multiHandler := slogmulti.Fanout(
+			slogzap.Option{Level: slog.LevelDebug, Logger: zapLogger}.NewZapHandler(),
+			klogHandler,
+		)
+
+		logger := slog.New(multiHandler)
 		klogger.logger = logger
 		Infof("Initialized zap logger...")
 	})
 	return klogger
+}
+
+// SetKafkaWriter sets the Kafka writer for logging
+func (k *Klogger) SetKafkaWriter(brokers []string) {
+	k.kafkaWriter = setupKafkaWriter(brokers)
+	kafkaHandler := slogkafka.Option{
+		Level:       slog.LevelDebug,
+		KafkaWriter: k.kafkaWriter,
+	}.NewKafkaHandler()
+	k.logger = slog.New(slogmulti.Fanout(
+		k.logger.Handler(),
+		kafkaHandler,
+	))
 }
 
 // InitFlags is a shim, only accepts
