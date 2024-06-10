@@ -235,6 +235,20 @@ func (k *Klogger) Infof(format string, args ...interface{}) {
 	k.logger.Log(context.Background(), slog.LevelInfo, fmt.Sprintf(format, args...))
 }
 
+// InfoS is a shim for structured logging
+//
+//go:noinline
+func InfoS(msg string, keysAndValues ...interface{}) {
+	klogger.logger.Log(context.Background(), slog.LevelInfo, msg, slog.Group("", keysAndValues...))
+}
+
+// InfoS is a shim for structured logging
+//
+//go:noinline
+func (k *Klogger) InfoS(msg string, keysAndValues ...interface{}) {
+	k.logger.Log(context.Background(), slog.LevelInfo, msg, slog.Group("", keysAndValues...))
+}
+
 // Warning is a shim
 //
 //go:noinline
