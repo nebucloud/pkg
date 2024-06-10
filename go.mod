@@ -3,6 +3,7 @@ module github.com/nebucloud/pkg
 go 1.22.0
 
 require (
+	github.com/cespare/xxhash v1.1.0
 	github.com/envoyproxy/go-control-plane v0.12.0
 	github.com/pkg/errors v0.9.1
 	github.com/samber/slog-zap v1.0.0
@@ -14,6 +15,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.27.0
 	go.uber.org/fx v1.22.0
 	go.uber.org/zap v1.27.0
+	golang.org/x/sync v0.7.0
 	google.golang.org/grpc v1.64.0
 	google.golang.org/protobuf v1.34.1
 	gopkg.in/yaml.v2 v2.4.0
