@@ -550,3 +550,17 @@ func (k *Klogger) WithAll(args ...interface{}) *Klogger {
 		config: k.config,
 	}
 }
+
+// Debugf implements log.Logger.
+//
+//go:noinline
+func (k *Klogger) Debugf(format string, args ...interface{}) {
+	k.logger.Log(context.Background(), slog.LevelDebug, fmt.Sprintf(format, args...))
+}
+
+// Warnf implements log.Logger.
+//
+//go:noinline
+func (k *Klogger) Warnf(format string, args ...interface{}) {
+	k.logger.Log(context.Background(), slog.LevelWarn, fmt.Sprintf(format, args...))
+}
