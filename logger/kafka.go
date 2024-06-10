@@ -68,8 +68,8 @@ func NewKlogHandler() slog.Handler {
 	return &KlogWrapper{}
 }
 
-// setupKafkaWriter initializes and returns a Kafka writer.
-func setupKafkaWriter(brokers []string) *kafka.Writer {
+// / SetupKafkaWriter initializes and returns a Kafka writer.
+func SetupKafkaWriter(brokers []string) *kafka.Writer {
 	dialer := &kafka.Dialer{
 		Timeout:   10 * time.Second,
 		DualStack: true,
@@ -89,7 +89,7 @@ func setupKafkaWriter(brokers []string) *kafka.Writer {
 
 // NewKafkaHandler creates a new slog.Handler that forwards to Kafka.
 func NewKafkaHandler(brokers []string) slog.Handler {
-	kafkaWriter := setupKafkaWriter(brokers)
+	kafkaWriter := SetupKafkaWriter(brokers)
 	return slogkafka.Option{
 		Level:       slog.LevelDebug,
 		KafkaWriter: kafkaWriter,

@@ -117,7 +117,7 @@ func Singleton() *Klogger {
 
 // SetKafkaWriter sets the Kafka writer for logging
 func (k *Klogger) SetKafkaWriter(brokers []string) {
-	k.kafkaWriter = setupKafkaWriter(brokers)
+	k.kafkaWriter = SetupKafkaWriter(brokers)
 	kafkaHandler := slogkafka.Option{
 		Level:       slog.LevelDebug,
 		KafkaWriter: k.kafkaWriter,
