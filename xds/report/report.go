@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+// MeterServer is a load reporting service server that uses custom logging and metrics.
 type MeterServer struct {
 	loadReportingService.UnimplementedLoadReportingServiceServer
 
@@ -25,10 +26,14 @@ type MeterServer struct {
 	statsUpdateCounter     metric.Int64Counter
 	nodeGauge              metric.Int64UpDownCounter
 	logger                 *logger.Klogger
+
+	stopCh chan struct{}
 }
 
+// Option is a function type used to configure the MeterServer.
 type Option func(s *MeterServer)
 
+// NewMeterServer creates a new MeterServer with the given options.
 func NewMeterServer(logger *logger.Klogger, opts ...Option) loadReportingService.LoadReportingServiceServer {
 	meter := meter.GetMeter()
 	lrsUpdatesCounter, _ := meter.Int64Counter("lrs_updates")
@@ -48,6 +53,7 @@ func NewMeterServer(logger *logger.Klogger, opts ...Option) loadReportingService
 	return s
 }
 
+// StreamLoadStats handles streaming load stats requests.
 func (s *MeterServer) StreamLoadStats(stream loadReportingService.LoadReportingService_StreamLoadStatsServer) error {
 	var node *corev3.Node
 	for {
@@ -66,6 +72,7 @@ func (s *MeterServer) StreamLoadStats(stream loadReportingService.LoadReportingS
 	}
 }
 
+// HandleRequest handles a single load stats request.
 func (s *MeterServer) HandleRequest(stream loadReportingService.LoadReportingService_StreamLoadStatsServer, request *loadReportingService.LoadStatsRequest) {
 	nodeID := request.GetNode().GetId()
 
@@ -100,6 +107,7 @@ func (s *MeterServer) HandleRequest(stream loadReportingService.LoadReportingSer
 	}
 }
 
+// removeNode removes a node from the nodesConnected map.
 func (s *MeterServer) removeNode(ctx context.Context, node *corev3.Node) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -111,12 +119,24 @@ func (s *MeterServer) removeNode(ctx context.Context, node *corev3.Node) {
 	s.nodeGauge.Add(ctx, -1)
 }
 
+// WithStatsIntervalInSeconds returns an option to set the stats interval in seconds.
 func WithStatsIntervalInSeconds(statsIntervalInSeconds int64) Option {
 	return func(s *MeterServer) {
 		s.statsIntervalInSeconds = statsIntervalInSeconds
 	}
 }
 
+// Run starts the MeterServer.
+func (s *MeterServer) Run() {
+	<-s.stopCh
+}
+
+// Stop stops the MeterServer.
+func (s *MeterServer) Stop() {
+	close(s.stopCh)
+}
+
+// LoadReportingServiceModule is an FX module that provides the load reporting service.
 var LoadReportingServiceModule = fx.Options(
 	fx.Provide(
 		func(logger *logger.Klogger) loadReportingService.LoadReportingServiceServer {
@@ -129,6 +149,7 @@ var LoadReportingServiceModule = fx.Options(
 	fx.Invoke(RegisterLoadReportingService),
 )
 
+// RegisterLoadReportingService registers the load reporting service with the gRPC server.
 func RegisterLoadReportingService(lc fx.Lifecycle, grpcServer *grpc.Server, lrsServer loadReportingService.LoadReportingServiceServer) {
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
