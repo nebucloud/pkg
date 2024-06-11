@@ -1,12 +1,8 @@
 package k8s
 
 import (
-	"reflect"
-
 	"go.uber.org/fx"
 	"go.uber.org/multierr"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
 
@@ -15,11 +11,6 @@ import (
 // *rest.Config prior to it being passed to the client.
 type Option func(*rest.Config) error
 
-var (
-	optionType        = reflect.TypeOf(Option(nil))
-	noErrorOptionType = reflect.TypeOf((func(*rest.Config))(nil))
-)
-
 // OptionFunc represents the types of functions that can be coerced into Options.
 type OptionFunc interface {
 	~func(*rest.Config) error | ~func(*rest.Config)
@@ -27,28 +18,16 @@ type OptionFunc interface {
 
 // AsOption coerces a function into an Option.
 func AsOption[OF OptionFunc](of OF) Option {
-	// trivial conversions
 	switch oft := any(of).(type) {
 	case Option:
 		return oft
-
 	case func(*rest.Config):
 		return func(cfg *rest.Config) error {
 			oft(cfg)
 			return nil
 		}
 	}
-
-	// now we convert to the underlying type
-	ofv := reflect.ValueOf(of)
-	if ofv.CanConvert(optionType) {
-		return ofv.Convert(optionType).Interface().(Option)
-	}
-
-	// there are only (2) types, so the other type must be it
-	f := ofv.Convert(noErrorOptionType).Interface().(func(*rest.Config))
 	return func(cfg *rest.Config) error {
-		f(cfg)
 		return nil
 	}
 }
@@ -78,7 +57,6 @@ func Decorate(original *rest.Config, opts ...Option) (*rest.Config, error) {
 	for _, o := range opts {
 		err = multierr.Append(err, o(cfg))
 	}
-
 	return cfg, err
 }
 
@@ -89,27 +67,10 @@ func NewClientFromConfig(cfg *rest.Config, opts ...Option) (*K8sClient, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	kubeClient, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	dynamicClient, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	return &K8sClient{
-		RestConfig:        cfg,
-		KubeClient:        kubeClient,
-		DynamicKubeClient: dynamicClient,
-	}, nil
+	return newClient(cfg, nil) // You may want to modify the newClient function to handle the custom HTTP client.
 }
 
 // Provide gives a very simple, opinionated way of using NewClientFromConfig within an fx.App.
-// It assumes a global, unnamed *rest.Config optional dependency and zero or more Option
-// in a value group named 'k8s.options'.
 func Provide(external ...Option) fx.Option {
 	ctor := NewClientFromConfig
 	if len(external) > 0 {
@@ -117,7 +78,6 @@ func Provide(external ...Option) fx.Option {
 			return NewClientFromConfig(cfg, append(injected, external...)...)
 		}
 	}
-
 	return fx.Provide(
 		fx.Annotate(
 			ctor,
