@@ -1,8 +1,6 @@
 package k8s
 
 import (
-	"net/http"
-
 	"github.com/nebucloud/pkg/logger"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -57,7 +55,7 @@ func (k *k8sProvider) OutOfClusterClient(kubeconfigPath string, logger *logger.K
 	return newClient(clientConfig, logger)
 }
 
-// NewClientFromConfig creates a new Kubernetes client using the provided configuration.
+/*
 func NewClientFromConfig(logger *logger.Klogger) (*K8sClient, *http.Client, error) {
 	httpClient, clientConfig, err := NewHttpClientWithConfig(logger)
 	if err != nil {
@@ -83,6 +81,7 @@ func NewClientFromConfig(logger *logger.Klogger) (*K8sClient, *http.Client, erro
 		DynamicKubeClient: dyClient,
 	}, httpClient, nil
 }
+*/
 
 // newClient is an internal function that creates a new K8sClient instance
 // using the provided REST config, encapsulating the creation logic.
