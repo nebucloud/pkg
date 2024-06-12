@@ -57,6 +57,10 @@ var (
 
 func init() {
 	zapLogger, _ := zap.NewProduction()
+
+	// Redirect klog to zap
+	initKlogToZap(zapLogger)
+
 	logger := slog.New(slogzap.Option{Level: slog.LevelDebug, Logger: zapLogger}.NewZapHandler())
 	klogger = &Klogger{
 		logger: logger,
