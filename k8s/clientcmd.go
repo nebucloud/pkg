@@ -1,10 +1,10 @@
 package k8s
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/nebucloud/pkg/logger"
+	"github.com/samber/oops"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -12,24 +12,32 @@ import (
 
 func NewHttpClientWithConfig(logger *logger.Klogger) (*http.Client, *rest.Config, error) {
 	logger.Info("Loading Kubernetes client configuration...")
-
-	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(clientcmd.NewDefaultClientConfigLoadingRules(), nil).ClientConfig()
+	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		clientcmd.NewDefaultClientConfigLoadingRules(), nil).ClientConfig()
 	if err != nil {
-		logger.Error("Failed to load Kubernetes client configuration", err)
-		return nil, nil, err
+		return nil, nil, oops.
+			In("k8s").
+			With("function", "NewHttpClientWithConfig").
+			With("operation", "load_client_config").
+			Wrapf(err, "failed to load Kubernetes client configuration")
 	}
 
 	transport, err := rest.TransportFor(config)
 	if err != nil {
-		logger.Error("Failed to create HTTP transport for Kubernetes client", err)
-		return nil, nil, err
+		return nil, nil, oops.
+			In("k8s").
+			With("function", "NewHttpClientWithConfig").
+			With("operation", "create_transport").
+			Wrapf(err, "failed to create HTTP transport for Kubernetes client")
 	}
 
 	httpTransport, ok := transport.(*http.Transport)
 	if !ok {
-		err := fmt.Errorf("unexpected transport type: %T", transport)
-		logger.Error(err.Error())
-		return nil, nil, err
+		return nil, nil, oops.
+			In("k8s").
+			With("function", "NewHttpClientWithConfig").
+			With("operation", "assert_transport_type").
+			Errorf("unexpected transport type: %T", transport)
 	}
 
 	logger.Info("Kubernetes client configuration loaded successfully")
