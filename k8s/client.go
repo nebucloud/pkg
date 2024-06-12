@@ -6,6 +6,7 @@ import (
 
 	"github.com/nebucloud/pkg/models"
 	"github.com/pkg/errors"
+	"github.com/samber/oops"
 	"gopkg.in/yaml.v2"
 )
 
@@ -39,7 +40,7 @@ func (c *K8sClient) GetKubeConfig() (*models.Kubeconfig, error) {
 	}
 	var config models.Kubeconfig
 	if err := yaml.Unmarshal(file, &config); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal kubeconfig")
+		return nil, oops.Wrapf(err, "failed to unmarshal kubeconfig")
 	}
 	return &config, nil
 }
@@ -70,7 +71,7 @@ func (c *K8sClient) GetCurrentNamespace() (string, error) {
 			return context.Context.Namespace, nil
 		}
 	}
-	return "", errors.New("current context not found in kubeconfig")
+	return "", oops.Errorf("current context not found in kubeconfig")
 }
 
 // GetCurrentCluster is a method of the K8sClient that retrieves the current cluster
@@ -86,7 +87,7 @@ func (c *K8sClient) GetCurrentCluster() (string, error) {
 			return context.Context.Cluster, nil
 		}
 	}
-	return "", errors.New("current context not found in kubeconfig")
+	return "", oops.Errorf("current context not found in kubeconfig")
 }
 
 // GetCurrentUser is a method of the K8sClient that retrieves the current user
@@ -102,5 +103,5 @@ func (c *K8sClient) GetCurrentUser() (string, error) {
 			return context.Context.User, nil
 		}
 	}
-	return "", errors.New("current context not found in kubeconfig")
+	return "", oops.Errorf("current context not found in kubeconfig")
 }

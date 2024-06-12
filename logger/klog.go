@@ -9,10 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	slogkafka "github.com/samber/slog-kafka"
 	slogmulti "github.com/samber/slog-multi"
 	slogzap "github.com/samber/slog-zap"
-	"github.com/segmentio/kafka-go"
 	"github.com/spf13/pflag"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -37,9 +35,9 @@ type Config struct {
 
 // Klogger wraps a slog logger
 type Klogger struct {
-	logger      *slog.Logger
-	config      Config
-	kafkaWriter *kafka.Writer
+	logger *slog.Logger
+	config Config
+	// kafkaWriter *kafka.Writer
 }
 
 const (
@@ -79,58 +77,33 @@ func Singleton() *Klogger {
 		if l := klogger.config.level; l < MinLevel || l > MaxLevel {
 			panic(fmt.Errorf("FATAL: 'v' must be in the range [0, 4]"))
 		}
-
 		klogger.config.zapConfig = zap.NewProductionConfig()
-
 		// change time from ns to formatted
 		klogger.config.zapConfig.EncoderConfig.TimeKey = "time"
 		klogger.config.zapConfig.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-
 		// always set to debug level
 		klogger.config.zapConfig.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
-
 		// due to gaps between zap and klog
 		if !klogger.config.alsologtostderr {
 			klogger.config.zapConfig.OutputPaths = []string{"stdout"}
 		}
-
 		// trace the real source caller due to manual inline is not supported
 		zapLogger, err := klogger.config.zapConfig.Build(zap.AddCallerSkip(1))
 		if err != nil {
 			panic(err)
 		}
-
-		klogHandler := NewKlogHandler()
+		// klogHandler := NewKlogHandler()
 
 		// Combine handlers using slogmulti
 		multiHandler := slogmulti.Fanout(
 			slogzap.Option{Level: slog.LevelDebug, Logger: zapLogger}.NewZapHandler(),
-			klogHandler,
+			// klogHandler,
 		)
-
 		logger := slog.New(multiHandler)
 		klogger.logger = logger
 		Infof("Initialized zap logger...")
 	})
 	return klogger
-}
-
-// SetKafkaWriter sets the Kafka writer for logging
-func (k *Klogger) SetKafkaWriter(brokers []string) {
-	k.kafkaWriter = SetupKafkaWriter(brokers)
-	kafkaHandler := slogkafka.Option{
-		Level:       slog.LevelDebug,
-		KafkaWriter: k.kafkaWriter,
-	}.NewKafkaHandler()
-	k.logger = slog.New(slogmulti.Fanout(
-		k.logger.Handler(),
-		kafkaHandler,
-	))
-}
-
-// GetKafkaWriter returns the Kafka writer instance
-func (k *Klogger) GetKafkaWriter() *kafka.Writer {
-	return k.kafkaWriter
 }
 
 // SetLogger sets the slog.Logger instance
@@ -577,6 +550,12 @@ func (k *Klogger) WithAll(args ...interface{}) *Klogger {
 	for _, arg := range args {
 		t := reflect.TypeOf(arg)
 		v := reflect.ValueOf(arg)
+
+		// Check if the type is a struct
+		if t.Kind() != reflect.Struct {
+			continue // or handle error
+		}
+
 		fields := make([]interface{}, 0, t.NumField()*2)
 		for i := 0; i < t.NumField(); i++ {
 			field := t.Field(i)
