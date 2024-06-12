@@ -6,6 +6,7 @@ import (
 	"net"
 	"strconv"
 
+	"github.com/edgedb/edgedb-go"
 	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	listenerv3 "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
@@ -15,6 +16,8 @@ import (
 	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
 	"github.com/envoyproxy/go-control-plane/pkg/cache/v3"
 	"github.com/envoyproxy/go-control-plane/pkg/wellknown"
+	consulApi "github.com/hashicorp/consul/api"
+	memdb "github.com/hashicorp/go-memdb"
 	"github.com/nebucloud/pkg/xds/meter"
 	"github.com/nebucloud/pkg/xds/snapshot/apigateway"
 	"go.opentelemetry.io/otel/metric"
@@ -26,7 +29,7 @@ import (
 	k8scache "k8s.io/client-go/tools/cache"
 )
 
-func (s *Snapshotter) startServices(ctx context.Context) error {
+func (s *Snapshotter) startServices(ctx context.Context, memdb *memdb.MemDB, edgedb *edgedb.Client, consulClient *consulApi.Client) error {
 	emit := func() {
 		s.logger.Warnf("emit before ready")
 	}
@@ -37,6 +40,23 @@ func (s *Snapshotter) startServices(ctx context.Context) error {
 
 	reflector := k8scache.NewReflector(&k8scache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+			// Check if services are cached in MemDB
+			txn := memdb.Txn(false)
+			defer txn.Abort()
+			iter, err := txn.Get("services", "id")
+			if err != nil {
+				return nil, err
+			}
+			var services []corev1.Service
+			for obj := iter.Next(); obj != nil; obj = iter.Next() {
+				service := obj.(*corev1.Service)
+				services = append(services, *service)
+			}
+			if len(services) > 0 {
+				return &corev1.ServiceList{Items: services}, nil
+			}
+
+			// If services are not cached, fetch them from Kubernetes
 			return s.client.CoreV1().Services("").List(ctx, options)
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
@@ -51,9 +71,41 @@ func (s *Snapshotter) startServices(ctx context.Context) error {
 		s.kubeEventCounter.Add(ctx, 1, metric.WithAttributes(meter.ResourceAttrKey.String("services")))
 
 		services := sliceToService(store.List())
+
+		// Persist services in EdgeDB
+		for _, svc := range services {
+			err := edgedb.QuerySingle(ctx, `
+				INSERT Service {
+					name := <str>$name,
+					namespace := <str>$namespace,
+					// Add other service fields as needed
+				}
+			`, map[string]interface{}{
+				"name":      svc.Name,
+				"namespace": svc.Namespace,
+			})
+			if err != nil {
+				s.logger.Errorf("Failed to persist service in EdgeDB: %v", err)
+			}
+		}
+
+		// Register services with Consul
+		for _, svc := range services {
+			registration := &consulApi.AgentServiceRegistration{
+				ID:      fmt.Sprintf("%s-%s", svc.Name, svc.Namespace),
+				Name:    svc.Name,
+				Address: svc.Spec.ClusterIP,
+				// Add other service metadata as needed
+			}
+			err := consulClient.Agent().ServiceRegister(registration)
+			if err != nil {
+				s.logger.Errorf("Failed to register service with Consul: %v", err)
+			}
+		}
+
 		resources := kubeServicesToResources(services)
 		apiGatewayResources, apiGatewayStats := apigateway.FromKubeServices(services, s.logger)
-		merged := append(resources, apiGatewayResources...) //nolint:gocritic
+		merged := append(resources, apiGatewayResources...)
 
 		resourcesByType := resourcesToMap(merged)
 		s.setServiceResourcesByType(resourcesByType)
@@ -76,6 +128,17 @@ func (s *Snapshotter) startServices(ctx context.Context) error {
 		}
 
 		s.servicesCache.SetSnapshot(ctx, "", snapshot)
+
+		// Cache services in MemDB
+		txn := memdb.Txn(true)
+		for _, svc := range services {
+			if err := txn.Insert("services", svc); err != nil {
+				txn.Abort()
+				s.logger.Errorf("Failed to cache service in MemDB: %v", err)
+				return
+			}
+		}
+		txn.Commit()
 	}
 
 	reflector.Run(ctx.Done())

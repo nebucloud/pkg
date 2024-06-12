@@ -8,8 +8,8 @@ import (
 	loadReportingService "github.com/envoyproxy/go-control-plane/envoy/service/load_stats/v3"
 	"github.com/nebucloud/pkg/logger"
 	"github.com/nebucloud/pkg/xds/meter"
+	"github.com/samber/do"
 	"go.opentelemetry.io/otel/metric"
-	"go.uber.org/fx"
 
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -86,8 +86,11 @@ func (s *MeterServer) HandleRequest(stream loadReportingService.LoadReportingSer
 		s.nodesConnected[nodeID] = true
 		s.nodeGauge.Add(stream.Context(), 1)
 
+		// Use the actual cluster name instead of a dummy value
+		clusterName := request.Node.Cluster
+
 		err := stream.Send(&loadReportingService.LoadStatsResponse{
-			Clusters:                  []string{"dummy_cluster"},
+			Clusters:                  []string{clusterName},
 			LoadReportingInterval:     &durationpb.Duration{Seconds: s.statsIntervalInSeconds},
 			ReportEndpointGranularity: true,
 		})
@@ -136,25 +139,14 @@ func (s *MeterServer) Stop() {
 	close(s.stopCh)
 }
 
-// LoadReportingServiceModule is an FX module that provides the load reporting service.
-var LoadReportingServiceModule = fx.Options(
-	fx.Provide(
-		func(logger *logger.Klogger) loadReportingService.LoadReportingServiceServer {
-			return NewMeterServer(
-				logger,
-				WithStatsIntervalInSeconds(300),
-			)
-		},
-	),
-	fx.Invoke(RegisterLoadReportingService),
-)
-
 // RegisterLoadReportingService registers the load reporting service with the gRPC server.
-func RegisterLoadReportingService(lc fx.Lifecycle, grpcServer *grpc.Server, lrsServer loadReportingService.LoadReportingServiceServer) {
-	lc.Append(fx.Hook{
-		OnStart: func(context.Context) error {
-			loadReportingService.RegisterLoadReportingServiceServer(grpcServer, lrsServer)
-			return nil
-		},
-	})
+func RegisterLoadReportingService(grpcServer *grpc.Server, lrsServer loadReportingService.LoadReportingServiceServer, logger *logger.Klogger) {
+	loadReportingService.RegisterLoadReportingServiceServer(grpcServer, lrsServer)
+}
+
+// InitializeLoadReportingService initializes the load reporting service.
+func InitializeLoadReportingService(injector *do.Injector, logger *logger.Klogger, grpcServer *grpc.Server) {
+	lrsServer := NewMeterServer(logger, WithStatsIntervalInSeconds(300))
+	do.ProvideValue(injector, lrsServer)
+	RegisterLoadReportingService(grpcServer, lrsServer, logger)
 }
