@@ -4,3 +4,6 @@
 [submodule "consul-gateway"]
 	path = consul-gateway
 	url = https://github.com/nebucloud/consul-gateway.git
+[submodule "xds-k8s"]
+	path = xds-k8s
+	url = https://github.com/nebucloud/xds-k8s.git
