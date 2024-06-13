@@ -1,0 +1,6 @@
+[submodule "xds-server"]
+	path = xds-server
+	url = https://github.com/nebucloud/xds-server.git
+[submodule "consul-gateway"]
+	path = consul-gateway
+	url = https://github.com/nebucloud/consul-gateway.git
